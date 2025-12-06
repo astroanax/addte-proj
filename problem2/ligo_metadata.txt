@@ -1,0 +1,5 @@
+sample_rate=4096
+duration=2.0
+num_samples=8192
+event=GW150914
+description=First gravitational wave detection - Binary black hole merger

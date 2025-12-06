@@ -1,0 +1,8 @@
+%Define the differential equation as a system of first-order ODEs
+function dxdt = myode1(t, x)
+dxdt = zeros(2,1);
+dxdt(1)=x(2);
+dxdt(2)=3.2*sin(x(1)*t) - 2.6*x(2) - 7.9*x(1)^3-sign(x(1)*x(2));
+
+
+
