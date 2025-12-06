@@ -1,0 +1,1330 @@
+\documentclass[12pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{geometry}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage{array}
+
+\geometry{margin=1in}
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    backgroundcolor=\color{gray!10}
+}
+
+\title{\textbf{Applied Data-Driven Techniques in Engineering}\\
+\large ME3435E - Project Report}
+\author{Mohammed Rehan Tadpatri\\ B231090PE \\ https://github.com/astroanax/addte-proj}
+\date{6 December 2025}
+
+\begin{document}
+
+\maketitle
+
+\tableofcontents
+\newpage
+
+%==============================================================================
+\section{Dynamic Mode Decomposition of Stock Portfolio Data}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{crucial.png}
+    \caption{Crucial announced its exit from the consumer RAM market a few days ago}
+\end{figure}
+
+\subsection{Introduction and Inspiration}
+
+We apply Dynamic Mode Decomposition (DMD) to analyze financial time-series data. Our approach is inspired by the work of Mann and Kutz \cite{kutz2015dmd}, who demonstrated the application of DMD-based algorithmic trading strategies on portfolios of financial data.
+
+Mann and Kutz showed that DMD, originally developed for fluid dynamics applications, is a powerful equation-free, data-driven method capable of decomposing complex dynamical systems into low-rank modes with known temporal behavior. In the financial context, DMD decomposes stock portfolio data into ``portfolio modes'' --- linear combinations of stocks that exhibit coherent temporal dynamics. The method approximates the system as $\mathbf{x}_{k+1} = \mathbf{A}\mathbf{x}_k$, where $\mathbf{A}$ is the Koopman operator, and the solution takes the form:
+\begin{equation}
+    \tilde{\mathbf{x}}(t) = \sum_{k=1}^{K} b_k \boldsymbol{\psi}_k e^{\omega_k t}
+\end{equation}
+where $\boldsymbol{\psi}_k$ are the DMD modes (spatial/portfolio structures), $\omega_k$ are the eigenvalues (temporal dynamics), and $b_k$ are the mode amplitudes. The real part of $\omega_k$ indicates growth ($\text{Re}(\omega_k) > 0$) or decay ($\text{Re}(\omega_k) < 0$), while the imaginary part represents oscillation frequency.
+
+The key insight from Kutz's work is that DMD can identify transient, evanescent signals in financial data by extracting dominant modes and their time evolution. Modes with positive growth rates represent bullish trends, while decaying modes indicate bearish behavior. This decomposition enables short-term prediction and trading strategy formulation based on the dominant market dynamics.
+
+\subsection{Data Selection and Motivation}
+
+\subsubsection{Why RAM/Memory Semiconductor Stocks?}
+
+We chose to analyze the RAM (Random Access Memory) and memory semiconductor industry for a timely and relevant reason: \textbf{Crucial, a major consumer memory brand owned by Micron Technology (MU), recently announced its exit from the consumer DRAM market} in late 2025. This significant industry shift makes the memory sector particularly interesting for dynamic analysis, as the market adjusts to changing competitive dynamics.
+
+The memory semiconductor industry is characterized by high correlation among companies due to shared technology cycles, cyclical demand patterns tied to consumer electronics and data center buildouts. The recent market disruption from AI/HPC memory demand and the supply chain interconnections among manufacturers and equipment suppliers are also key factors.
+
+\subsubsection{Portfolio Composition}
+
+We selected 10 stocks representing different segments of the memory ecosystem:
+
+\begin{table}[H]
+\centering
+\caption{Stock Portfolio Composition}
+\label{tab:portfolio}
+\begin{tabular}{@{}llp{7cm}@{}}
+\toprule
+\textbf{Ticker} & \textbf{Company} & \textbf{Role in Memory Industry} \\
+\midrule
+MU & Micron Technology & DRAM \& NAND manufacturer (owns Crucial brand) \\
+WDC & Western Digital & NAND flash memory \& storage \\
+INTC & Intel & Memory \& storage solutions \\
+TXN & Texas Instruments & Semiconductor memory components \\
+MRVL & Marvell Technology & Memory controllers \& interfaces \\
+AMAT & Applied Materials & Memory chip fabrication equipment \\
+LRCX & Lam Research & Memory etch \& deposition equipment \\
+KLAC & KLA Corporation & Memory chip inspection equipment \\
+AMD & AMD & Memory-intensive processors \\
+NVDA & NVIDIA & HBM memory demand driver (AI/GPU) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Data Source and Period}
+
+\begin{itemize}
+    \item \textbf{Source:} Yahoo Finance API (via \texttt{yfinance} Python library)
+    \item \textbf{Period:} November 6, 2025 -- December 5, 2025 (1 month)
+    \item \textbf{Interval:} Daily closing prices
+    \item \textbf{Data points:} 21 trading days $\times$ 10 stocks = 210 data points
+\end{itemize}
+
+\subsection{Methodology}
+
+\subsubsection{DMD Algorithm}\footnote{We did not use the given DMD.m code, but implemented our own DMD instead}
+
+The DMD algorithm was implemented following the standard procedure:
+
+\begin{enumerate}
+    \item \textbf{Data normalization:} Zero-mean, unit-variance normalization to ensure fair comparison across stocks with different price scales.
+    
+    \item \textbf{Time-shifted matrices:} Construct $\mathbf{X}_1 = [\mathbf{x}_1, \ldots, \mathbf{x}_{M-1}]$ and $\mathbf{X}_2 = [\mathbf{x}_2, \ldots, \mathbf{x}_M]$
+    
+    \item \textbf{SVD decomposition:} $\mathbf{X}_1 = \mathbf{U}\boldsymbol{\Sigma}\mathbf{V}^*$, truncated to rank $r$
+    
+    \item \textbf{Reduced DMD matrix:} $\tilde{\mathbf{A}} = \mathbf{U}_r^* \mathbf{X}_2 \mathbf{V}_r \boldsymbol{\Sigma}_r^{-1}$
+    
+    \item \textbf{Eigendecomposition:} $\tilde{\mathbf{A}}\mathbf{W} = \mathbf{W}\boldsymbol{\Lambda}$
+    
+    \item \textbf{DMD modes:} $\boldsymbol{\Phi} = \mathbf{X}_2 \mathbf{V}_r \boldsymbol{\Sigma}_r^{-1} \mathbf{W}$
+    
+    \item \textbf{Continuous eigenvalues:} $\omega_k = \ln(\lambda_k)/\Delta t$
+\end{enumerate}
+
+The rank $r$ was chosen to capture 90\% of the total energy in the singular value spectrum.
+
+\subsection{Results}\footnote{The color in some images is distorted due to MATLAB color scheme issues on Linux}
+
+\subsubsection{Summary Statistics}
+
+\begin{table}[H]
+\centering
+\caption{DMD Analysis Results Summary}
+\label{tab:summary}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Number of stocks (N) & 10 \\
+Number of time snapshots (M) & 21 days \\
+Dominant modes (r) at 90\% energy & 3 \\
+Reconstruction error & 3.28\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{DMD Eigenvalues and Mode Analysis}
+
+\begin{table}[H]
+\centering
+\caption{DMD Mode Characteristics}
+\label{tab:modes}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+\textbf{Mode} & \textbf{$\omega_k$} & \textbf{Growth Rate} & \textbf{Period} & \textbf{Interpretation} \\
+\midrule
+1 & $-0.163 + 0.079i$ & $-0.163$ rad/day & 79.5 days & Decaying, oscillatory \\
+2 & $-0.163 - 0.079i$ & $-0.163$ rad/day & 79.5 days & Decaying, oscillatory \\
+3 & $-0.349 + 0.000i$ & $-0.349$ rad/day & --- & Decaying, non-oscillatory \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Figures}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig1_dmd_decomposition.png}
+    \caption{DMD Decomposition Overview. Top-left: Singular value distribution showing dominant modes. Middle-left: Eigenvalues $\omega_k$ in the complex plane (all in the left half-plane indicating decay). Top-right panels: First four DMD modes showing stock contributions. Bottom panels: Individual stock decomposition onto DMD modes.}
+    \label{fig:decomposition}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig2_mode_analysis.png}
+    \caption{Detailed Mode Analysis. Shows DMD modes heatmap, discrete eigenvalues $\lambda$ with unit circle (all inside indicating stability/decay), mode amplitudes, time evolution, growth rates, and oscillation frequencies.}
+    \label{fig:mode_analysis}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=0.9\textwidth]{fig3_eigenvalue_distribution.png}
+    \caption{Eigenvalue Distribution. Left: Scatter plot of $\omega_k$ in the complex plane with color indicating amplitude. Right: Histogram of growth rates showing all modes are decaying.}
+    \label{fig:eigenvalue_dist}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig4_reconstruction.png}
+    \caption{Original vs DMD Reconstructed Data. Comparison of actual stock prices (blue) with DMD reconstruction (red dashed) for all 10 stocks. The 3.28\% reconstruction error indicates excellent fit.}
+    \label{fig:reconstruction}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{fig5_summary.png}
+    \caption{Portfolio Analysis Summary. Top-left: Normalized stock prices over the analysis period. Top-right: Energy distribution by mode (3 modes capture 90\%). Bottom-left: Mode interpretation. Bottom-right: Reconstruction error by individual stock.}
+    \label{fig:summary}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Interpretation of Results}
+
+The DMD analysis reveals several important characteristics of the RAM/memory semiconductor portfolio during November--December 2025:
+
+\begin{enumerate}
+    \item \textbf{All modes are decaying:} The negative real parts of all eigenvalues ($\text{Re}(\omega_k) < 0$) indicate a bearish trend across the portfolio during this period. This aligns with the broader market uncertainty following Crucial's exit from the consumer market and general semiconductor sector volatility.
+    
+    \item \textbf{Conjugate pair oscillation (Modes 1 \& 2):} The complex conjugate pair with imaginary parts $\pm 0.079$ rad/day corresponds to an oscillation period of approximately 80 trading days. This suggests the presence of a longer-term cyclical pattern in the memory sector, likely tied to quarterly earnings cycles and demand forecasting updates.
+    
+    \item \textbf{Strong decay mode (Mode 3):} The purely real eigenvalue $\omega_3 = -0.349$ represents a faster-decaying, non-oscillatory component. This mode captures the monotonic price decline component observed in several stocks during this period.
+    
+    \item \textbf{Low-rank structure:} Only 3 modes are needed to capture 90\% of the portfolio dynamics, demonstrating strong correlation among memory stocks. This is expected given their shared exposure to memory demand cycles, AI infrastructure buildout, and equipment supply chain dynamics.
+    
+    \item \textbf{Excellent reconstruction:} The 3.28\% reconstruction error indicates that DMD successfully captures the dominant dynamics of this portfolio, validating the linear approximation assumption over this time window.
+\end{enumerate}
+
+\subsubsection{Connection to Crucial's Market Exit}
+
+The observed decaying modes may partially reflect market uncertainty surrounding Micron's (MU) strategic shift. When Crucial announced its exit from consumer DRAM, MU stock showed increased volatility as investors reassessed revenue projections.
+
+Competitors like WDC may benefit from reduced competition and equipment suppliers (AMAT, LRCX, KLAC) face uncertainty about future capacity investments.
+
+The DMD decomposition captures these interconnected dynamics through the portfolio modes, which show how different stocks contribute to the overall market movement pattern.
+
+\subsubsection{Comparison with Kutz et al.}
+
+Similar to Kutz's analysis of biotech and transportation sectors, our memory semiconductor portfolio exhibits:
+\begin{itemize}
+    \item Clear low-rank structure amenable to DMD analysis
+    \item Identifiable growth/decay patterns through eigenvalue analysis
+    \item Strong inter-stock correlations captured by leading DMD modes
+\end{itemize}
+
+However, unlike Kutz's identification of ``hot-spots'' with positive growth modes for trading strategies, our current analysis period shows predominantly bearish dynamics, a period where a conservative holding strategy would be preferred over active trading based on DMD signals.
+
+\subsection{Conclusion}
+
+Dynamic Mode Decomposition successfully decomposed the RAM/memory semiconductor portfolio into 3 dominant modes capturing 90\% of the market dynamics. The analysis revealed bearish trend across all modes during Nov to Dec 2025 and a 80-day oscillation period in the dominant mode pair
+We notice strong correlation structure among memory industry stocks and excellent reconstruction accuracy (3.28\% error)
+
+\newpage
+%==============================================================================
+\section{DFT Analysis and Digital Filtering}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{ligo.jpg}
+\end{figure}
+\subsection{Introduction}
+
+This problem demonstrates the application of the Discrete Fourier Transform (DFT) for frequency analysis and the implementation of digital filters (low-pass, high-pass, and band-pass) on time-varying data. We chose an exciting and scientifically significant dataset: the LIGO gravitational wave detection GW150914\footnote{\url{https://www.ethanhein.com/wp/2016/what-the-heck-is-the-ligo-chirp/}} - the first direct observation of gravitational waves from merging black holes.
+
+\subsection{Data Selection: LIGO GW150914}
+
+\subsubsection{Why Gravitational Wave Data?}
+
+The GW150914 event (September 14, 2015) represents one of the most significant scientific discoveries of the 21st century, confirming Einstein's century-old prediction of gravitational waves. This data is ideal for demonstrating DFT and filtering because of its rich frequency content from $\sim$35 Hz to $\sim$250 Hz as the black holes spiral inward and merge. The noise provides a real filterting challenge, and the GWOSC provides free access to this data. This won the Nobel Prize in 2017
+
+\subsubsection{Data Specifications}
+
+\begin{table}[H]
+\centering
+\caption{LIGO GW150914 Data Parameters}
+\label{tab:ligo_data}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Source & LIGO Hanford (H1) detector \\
+Event & GW150914 (Binary black hole merger) \\
+Sample rate & 4096 Hz \\
+Duration & 2.0 seconds \\
+Number of samples & 8192 \\
+Data type & Strain (dimensionless, $\sim 10^{-21}$) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Methodology}
+
+\subsubsection{Discrete Fourier Transform (DFT)}
+
+The DFT converts a discrete time-domain signal $x[n]$ of length $N$ into its frequency-domain representation:
+\begin{equation}
+    X[k] = \sum_{n=0}^{N-1} x[n] \cdot e^{-j2\pi kn/N}, \quad k = 0, 1, \ldots, N-1
+\end{equation}
+
+The single-sided amplitude spectrum is computed as:
+\begin{equation}
+    |X[k]|_{\text{single}} = \frac{2|X[k]|}{N}, \quad k = 1, \ldots, N/2
+\end{equation}
+
+The frequency resolution is $\Delta f = f_s / N$, where $f_s$ is the sampling frequency.
+
+\subsubsection{Filter Design}
+
+We implemented three types of ideal filters with Gaussian roll-off (to minimize ringing artifacts) in the frequency domain:
+
+\begin{table}[H]
+\centering
+\caption{Filter Specifications}
+\label{tab:filters}
+\begin{tabular}{@{}lccp{6cm}@{}}
+\toprule
+\textbf{Filter Type} & \textbf{Cutoff} & \textbf{Passband} & \textbf{Purpose} \\
+\midrule
+Low-pass & 50 Hz & $0 - 50$ Hz & Removes high-frequency noise \\
+High-pass & 100 Hz & $100 - 2048$ Hz & Removes low-frequency drift \\
+Band-pass & 50--200 Hz & $50 - 200$ Hz & Isolates gravitational wave chirp \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The filters were implemented in the frequency domain by multiplying the signal's FFT by the filter transfer function $H(f)$:
+\begin{equation}
+    Y(f) = X(f) \cdot H(f)
+\end{equation}
+and then applying the inverse FFT to obtain the filtered time-domain signal.
+
+\subsection{Results}
+
+\subsubsection{Time Domain Signal}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig1_time_domain.png}
+    \caption{Original LIGO GW150914 gravitational wave strain signal in the time domain. The signal contains the characteristic ``chirp'' pattern from the merging black holes, embedded in detector noise.}
+    \label{fig:p2_time}
+\end{figure}
+
+\subsubsection{DFT Frequency-Amplitude Spectrum}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig2_dft_spectrum.png}
+    \caption{DFT analysis showing the frequency-amplitude spectrum. Top: Linear scale with dominant frequency peaks marked. Bottom: Logarithmic (dB) scale revealing the full dynamic range of frequency components.}
+    \label{fig:p2_dft}
+\end{figure}
+
+The DFT reveals dominant frequency components at:
+\begin{itemize}
+    \item 13.0 Hz (amplitude: 0.0645)
+    \item 20.5 Hz (amplitude: 0.0558)
+    \item 22.0 Hz (amplitude: 0.0465)
+    \item 16.0 Hz (amplitude: 0.0457)
+    \item 24.0 Hz (amplitude: 0.0422)
+\end{itemize}
+
+\subsubsection{Filtering Results --- Time Domain}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig3_filtered_time.png}
+    \caption{Time domain comparison of original and filtered signals. From top to bottom: Original signal, low-pass filtered (removes high-frequency noise), high-pass filtered (removes low-frequency baseline drift), band-pass filtered (isolates the chirp frequency range).}
+    \label{fig:p2_filtered_time}
+\end{figure}
+
+\subsubsection{Filtering Results --- Frequency Domain}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig4_filtered_freq.png}
+    \caption{Frequency domain comparison showing how each filter modifies the spectrum. The dashed vertical lines indicate filter cutoff frequencies. Low-pass retains only low frequencies, high-pass retains only high frequencies, and band-pass isolates the intermediate range.}
+    \label{fig:p2_filtered_freq}
+\end{figure}
+
+\subsubsection{Overlay Comparison}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig5_overlay_comparison.png}
+    \caption{Direct overlay comparison of all signals in both time domain (top) and frequency domain (bottom), allowing visual assessment of filter effects.}
+    \label{fig:p2_overlay}
+\end{figure}
+
+\subsubsection{Filter Frequency Response}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p2_fig6_filter_response.png}
+    \caption{Frequency response (transfer function magnitude) of the three filters implemented. The Gaussian roll-off provides smooth transitions at cutoff frequencies, minimizing time-domain ringing artifacts.}
+    \label{fig:p2_filter_response}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Effect of Low-Pass Filter (50 Hz cutoff)}
+The low-pass filter removes high-frequency components above 50 Hz. In the time domain, this results in a smoother signal with reduced high-frequency noise. However, since the gravitational wave chirp extends to higher frequencies ($\sim$250 Hz at merger), significant signal content is also removed.
+
+\subsubsection{Effect of High-Pass Filter (100 Hz cutoff)}
+The high-pass filter removes low-frequency components below 100 Hz, effectively eliminating baseline drift and low-frequency noise. This is particularly useful for LIGO data, which suffers from seismic noise at low frequencies. The filtered signal retains the higher-frequency portion of the chirp.
+
+\subsubsection{Effect of Band-Pass Filter (50--200 Hz)}
+The band-pass filter isolates the frequency range most relevant to the gravitational wave chirp. This is the optimal filter choice for gravitational wave detection, as it:
+\begin{itemize}
+    \item Removes low-frequency seismic noise
+    \item Removes high-frequency instrumental noise
+    \item Preserves the chirp signal in its characteristic frequency band
+\end{itemize}
+
+\subsection{Conclusion}
+
+The analysis successfully revealed the frequency content of the LIGO gravitational wave signal.
+The Low-pass filtering smooths the signal but removes high-frequency signal content, high-pass filtering removes baseline drift and low-frequency noise, and band-pass filtering is optimal for isolating the gravitational wave chirp
+\end{enumerate}
+
+\newpage
+%==============================================================================
+\section{Discrete-Time Signal Operations}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{coin.jpg}
+    \caption{Mario collects coins}
+\end{figure}
+
+\subsection{Introduction}
+
+This problem demonstrates fundamental discrete-time signal operations including time shifting and digital filtering. We implement both FIR (Finite Impulse Response) and IIR (Infinite Impulse Response) filters and compare their effects using DFT analysis.
+
+\subsection{Signal Selection: Mario Coin Sound}
+
+For an engaging and interpretable demonstration, we chose to model the iconic Mario ``coin'' sound - the rising arpeggio ``bling!'' heard when collecting a coin in Nintendo's Super Mario games. This signal is a universally known sound effect, and contains both smooth transitions and sharp changes
+
+The discrete signal is defined as:
+\begin{equation}
+    x[n] = [0, 2, 5, 8, 10, 12, 10, 8, 5, 3, 1, 0]
+\end{equation}
+with $N = 12$ samples and 10 non-zero elements.
+
+\subsection{Signal Operations}
+
+\subsubsection{(i) Original Signal $x[n]$}
+
+The original Mario coin sound pattern represents the characteristic rising-falling envelope of the ``bling!'' sound.
+
+\subsubsection{(ii) Time Delay: $x[n-2]$}
+
+The signal $x[n-2]$ represents the original signal delayed by 2 samples (shifted right). In discrete-time systems, this delay operation is fundamental for:
+\begin{itemize}
+    \item Buffer/memory operations
+    \item Echo effects in audio processing
+    \item Implementing FIR filters
+\end{itemize}
+
+\subsubsection{(iii) Time Advance: $x[n+1]$}
+
+The signal $x[n+1]$ represents the original signal advanced by 1 sample (shifted left). Note that this is a non-causal operation --- it requires knowledge of future values.
+
+\subsubsection{(iv) FIR Filter}
+
+The FIR filter is defined as:
+\begin{equation}
+    y[n] = 0.2 \cdot x[n] + 0.3 \cdot x[n-1] + 0.2 \cdot x[n-2]
+\end{equation}
+
+This is a \textbf{3-tap weighted moving average filter} with coefficients $[0.2, 0.3, 0.2]$. Properties:
+\begin{itemize}
+    \item \textbf{Type:} FIR (no feedback)
+    \item \textbf{Effect:} Low-pass filtering (smoothing)
+    \item \textbf{Stability:} Always stable (no poles)
+    \item \textbf{Phase:} Linear phase (symmetric coefficients)
+\end{itemize}
+
+\subsubsection{(v) IIR Filter}
+
+The IIR filter is defined as:
+\begin{equation}
+    y[n] = 0.2 \cdot x[n] + 0.3 \cdot x[n-1] + 0.5 \cdot y[n-1], \quad y[-1] = 0
+\end{equation}
+
+This is a \textbf{recursive filter with feedback}. Properties:
+\begin{itemize}
+    \item \textbf{Type:} IIR (has feedback from $y[n-1]$)
+    \item \textbf{Effect:} Stronger low-pass filtering + ``ringing''
+    \item \textbf{Stability:} Stable if $|0.5| < 1$ (pole inside unit circle)
+    \item \textbf{Memory:} Infinite impulse response due to feedback
+\end{itemize}
+
+\subsection{Results}
+
+\subsubsection{Signal Operations Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p3_fig1_signals.png}
+    \caption{Discrete-time signal operations on the Mario coin sound. (i) Original signal $x[n]$, (ii) delayed signal $x[n-2]$, (iii) advanced signal $x[n+1]$, (iv) FIR filtered output, (v) IIR filtered output, and comparison of all filtered signals.}
+    \label{fig:p3_signals}
+\end{figure}
+
+\subsubsection{DFT Comparison: Original vs FIR Filtered}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p3_fig2_dft_fir.png}
+    \caption{DFT comparison between original signal $x[n]$ and FIR filtered signal $y[n]$. The FIR filter attenuates high-frequency components, demonstrating its low-pass characteristic.}
+    \label{fig:p3_dft_fir}
+\end{figure}
+
+\subsubsection{DFT Comparison: Original vs IIR Filtered}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p3_fig3_dft_iir.png}
+    \caption{DFT comparison between original signal $x[n]$ and IIR filtered signal $y[n]$. The IIR filter shows stronger low-pass behavior due to its recursive feedback structure.}
+    \label{fig:p3_dft_iir}
+\end{figure}
+
+\subsubsection{Combined DFT Comparison}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p3_fig4_dft_all.png}
+    \caption{Combined DFT comparison showing the frequency response differences between the original signal, FIR filtered, and IIR filtered outputs.}
+    \label{fig:p3_dft_all}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Time Shifting Effects}
+
+\begin{itemize}
+    \item \textbf{Delay ($x[n-2]$):} The signal appears 2 samples later. In the frequency domain, this introduces a linear phase shift but does not change the magnitude spectrum.
+    \item \textbf{Advance ($x[n+1]$):} The signal appears 1 sample earlier. This is a non-causal operation that cannot be implemented in real-time systems.
+\end{itemize}
+
+\subsubsection{FIR vs IIR Filter Comparison}
+
+\begin{table}[H]
+\centering
+\caption{Comparison of FIR and IIR Filter Characteristics}
+\label{tab:fir_iir}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Property} & \textbf{FIR Filter} & \textbf{IIR Filter} \\
+\midrule
+Feedback & No & Yes ($0.5 \cdot y[n-1]$) \\
+Impulse Response & Finite (3 taps) & Infinite \\
+Stability & Always stable & Conditionally stable \\
+Low-pass Effect & Moderate & Stronger \\
+Computational Cost & Higher (more taps needed) & Lower \\
+Phase Response & Linear (symmetric) & Nonlinear \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Frequency Domain Observations}
+
+From the DFT comparisons:
+\begin{enumerate}
+    \item Both filters attenuate high-frequency components (low-pass behavior)
+    \item The IIR filter provides stronger attenuation due to its recursive feedback
+    \item The FIR filter preserves more of the original signal's shape
+    \item The IIR filter introduces more ``smoothing'' but also potential ringing artifacts
+\end{enumerate}
+
+\subsection{Conclusion}
+
+This analysis demonstrated time shifting operations ($x[n-2]$, $x[n+1]$) that translate the signal in time without affecting its frequency content magnitude.
+The FIR filtering provides controlled smoothing with guaranteed stability and linear phase, while the IIR filtering achieves stronger filtering effects with fewer coefficients but introduces feedback-related characteristics
+The DFT analysis clearly reveals how each filter modifies the signal's frequency content
+
+\newpage
+%==============================================================================
+\section{Sparse Identification of Nonlinear Dynamics (SINDy)}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{doublepen.jpg}
+    \caption{Double pendulum}
+\end{figure}
+
+\subsection{Introduction}
+
+This problem applies the Sparse Identification of Nonlinear Dynamics (SINDy) algorithm to discover governing equations from data. SINDy, developed by Brunton, Proctor, and Kutz \cite{sindy2016}, is a powerful data-driven method that identifies parsimonious (sparse) dynamical models from time-series measurements.
+
+The key insight of SINDy is that most physical systems are governed by equations with only a few active terms, even when expressed in a large library of candidate functions. By leveraging sparsity-promoting regression, SINDy can automatically discover these governing equations without prior knowledge of the system.
+
+\subsection{System Selection: Double Pendulum}
+
+We chose the double pendulum as our test system because it is a classic mechanics problem and a fundamental example in non dynamics and chaos. The coupled oscillators demonstrate how SINDy can identify coupled differential equations. It exhibits chaotic behavior, but its linear version shows harmonic oscillation.
+
+\subsubsection{Double Pendulum Equations (Small-Angle Approximation)}
+
+For a double pendulum with equal masses $m$ and equal lengths $L$, the state variables are:
+\begin{itemize}
+    \item $\theta_1, \theta_2$: angular positions of the two pendulums
+    \item $\omega_1 = \dot{\theta}_1, \omega_2 = \dot{\theta}_2$: angular velocities
+\end{itemize}
+
+Using the small-angle approximation ($\sin\theta \approx \theta$, $\cos\theta \approx 1$), the linearized equations of motion are:
+\begin{align}
+    \frac{d\theta_1}{dt} &= \omega_1 \\
+    \frac{d\theta_2}{dt} &= \omega_2 \\
+    \frac{d\omega_1}{dt} &= -2\frac{g}{L}\theta_1 + \frac{g}{L}\theta_2 \\
+    \frac{d\omega_2}{dt} &= 2\frac{g}{L}\theta_1 - 2\frac{g}{L}\theta_2
+\end{align}
+
+With $g = 9.81$ m/s$^2$ and $L = 1$ m, we have $g/L = 9.81$ rad/s$^2$.
+
+\subsection{Methodology: SINDy Algorithm}
+
+\subsubsection{Problem Formulation}
+
+Given time-series data $\mathbf{x}(t)$ and its derivative $\dot{\mathbf{x}}(t)$, SINDy seeks a sparse representation:
+\begin{equation}
+    \dot{\mathbf{x}} = \boldsymbol{\Theta}(\mathbf{x}) \boldsymbol{\Xi}
+\end{equation}
+where $\boldsymbol{\Theta}(\mathbf{x})$ is a library of candidate functions and $\boldsymbol{\Xi}$ contains the sparse coefficients.
+
+\subsubsection{Polynomial Library}
+
+For $n = 4$ state variables ($\theta_1, \theta_2, \omega_1, \omega_2$) and polynomial order 2, the library contains:
+\begin{equation}
+    \boldsymbol{\Theta} = [1, \theta_1, \theta_2, \omega_1, \omega_2, \theta_1^2, \theta_1\theta_2, \theta_1\omega_1, \ldots, \omega_2^2]
+\end{equation}
+yielding 15 candidate functions per equation.
+
+\subsubsection{Sparse Regression}
+
+The coefficients $\boldsymbol{\Xi}$ are found using Sequential Thresholded Least Squares (STLS):
+\begin{enumerate}
+    \item Solve $\boldsymbol{\Xi} = \boldsymbol{\Theta}^\dagger \dot{\mathbf{x}}$ (least squares)
+    \item Set coefficients below threshold $\lambda$ to zero
+    \item Repeat until convergence
+\end{enumerate}
+
+We used $\lambda = 0.1$ for sparsification.
+
+\subsubsection{Implementation}
+
+The analysis was performed using the SINDy MATLAB code provided by Brunton et al., modified for the double pendulum system:
+\begin{itemize}
+    \item \textbf{Training data:} 10,001 points from $t \in [0, 10]$ with $dt = 0.001$
+    \item \textbf{Initial condition:} $[\theta_1, \theta_2, \omega_1, \omega_2]^T = [0.2, 0.1, 0, 0]^T$ rad
+    \item \textbf{Noise level:} 0.1\% Gaussian noise added to derivatives
+    \item \textbf{Integration:} \texttt{ode45} with tolerances $10^{-12}$
+\end{itemize}
+
+\subsection{Results}
+
+\subsubsection{Identified Dynamics}
+
+SINDy successfully identified the double pendulum equations:
+
+\begin{table}[H]
+\centering
+\caption{SINDy Coefficient Identification Results}
+\label{tab:sindy_coef}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Term} & \textbf{True Coefficient} & \textbf{SINDy Identified} \\
+\midrule
+\multicolumn{3}{c}{\textit{Equation for $\dot{\theta}_1$}} \\
+$\omega_1$ & 1.0000 & 1.0000 \\
+\midrule
+\multicolumn{3}{c}{\textit{Equation for $\dot{\theta}_2$}} \\
+$\omega_2$ & 1.0000 & 1.0000 \\
+\midrule
+\multicolumn{3}{c}{\textit{Equation for $\dot{\omega}_1$}} \\
+$\theta_1$ & $-19.62$ & $-19.6201$ \\
+$\theta_2$ & $9.81$ & $9.8100$ \\
+\midrule
+\multicolumn{3}{c}{\textit{Equation for $\dot{\omega}_2$}} \\
+$\theta_1$ & $19.62$ & $19.6200$ \\
+$\theta_2$ & $-19.62$ & $-19.6200$ \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The identified equations match the true dynamics with near-perfect accuracy.
+
+\subsubsection{Time Series Comparison}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p4_fig1_time_series.png}
+    \caption{Time series comparison of all four state variables ($\theta_1$, $\theta_2$, $\omega_1$, $\omega_2$) between the true model (blue) and SINDy-identified model (red dashed). The trajectories are indistinguishable.}
+    \label{fig:p4_timeseries}
+\end{figure}
+
+\subsubsection{Phase Portrait Comparison}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p4_fig2_phase_portrait.png}
+    \caption{Phase portraits for both pendulums showing $(\theta_i, \omega_i)$ trajectories. The true and SINDy models produce identical elliptical orbits characteristic of linearized pendulum motion.}
+    \label{fig:p4_phase}
+\end{figure}
+
+\subsubsection{Pendulum Motion Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p4_fig3_pendulum_snapshots.png}
+    \caption{Snapshots of the double pendulum configuration at different times. The first pendulum (blue) connects to the pivot, and the second pendulum (red) hangs from the first mass.}
+    \label{fig:p4_snapshots}
+\end{figure}
+
+\subsubsection{Coefficient Comparison}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p4_fig4_coefficients.png}
+    \caption{Bar chart comparison of true coefficients (blue) vs SINDy-identified coefficients (red) for all four equations. SINDy correctly identifies the sparse structure with only the physically relevant terms having non-zero coefficients.}
+    \label{fig:p4_coef}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Sparse Structure Discovery}
+
+SINDy correctly identified that out of 15 candidate functions per equation (60 total candidates), only 6 terms are active:
+\begin{itemize}
+    \item 1 term in $\dot{\theta}_1$ equation ($\omega_1$)
+    \item 1 term in $\dot{\theta}_2$ equation ($\omega_2$)
+    \item 2 terms in $\dot{\omega}_1$ equation ($\theta_1$, $\theta_2$)
+    \item 2 terms in $\dot{\omega}_2$ equation ($\theta_1$, $\theta_2$)
+\end{itemize}
+
+This demonstrates SINDy's ability to discover parsimonious models --- it automatically rejects all quadratic terms ($\theta_1^2$, $\theta_1\theta_2$, etc.) that are not present in the linearized equations.
+
+\subsubsection{Robustness to Noise}
+
+Despite 0.1\% noise added to the derivative measurements, SINDy achieved near-perfect coefficient identification ($<0.01\%$ error), and negligible trajectory prediction error
+
+This robustness is due to the sparsity-promoting regression, which acts as a regularizer against noise-induced spurious terms.
+
+\subsubsection{Physical Interpretability}
+
+The identified model is immediately interpretable. The $\omega_1$ and $\omega_2$ terms confirm the kinematic relationships ($\dot{\theta}_i = \omega_i$), and the $-2(g/L)\theta_1 + (g/L)\theta_2$ term in $\dot{\omega}_1$ shows how the first pendulum is influenced by both angles.
+
+The coupled nature of the system is evident in the cross-terms between $\theta_1$ and $\theta_2$
+
+\subsubsection{Small-Angle Approximation Validity}
+
+The small-angle approximation ($\sin\theta \approx \theta$) is valid for angles less than approximately 0.3 radians ($\sim$17°). Our initial conditions ($\theta_1 = 0.2$ rad, $\theta_2 = 0.1$ rad) satisfy this constraint, ensuring the linearized model accurately represents the true dynamics.
+
+\subsection{Conclusion}
+
+SINDy successfully discovered the governing equations of the linearized double pendulum from noisy data:
+
+We correctly identified the 6 active terms from 60 candidates, and did a near-perfect recovery of $g/L = 9.81$ rad/s$^2$ ratios
+The identified model accurately reproduces the coupled oscillation dynamics and reliably identifies despite measurement noise
+
+\newpage
+%==============================================================================
+\section{Cross-Correlation for Audio Pattern Matching}
+%==============================================================================
+
+\subsection{Introduction}
+
+This problem demonstrates the application of \textbf{cross-correlation} for audio pattern matching --- the fundamental technique behind music recognition services like Shazam. Cross-correlation measures the similarity between two signals as a function of the time-lag applied to one of them, enabling detection of where a pattern occurs within a longer signal.
+
+\subsection{Mathematical Background}
+
+\subsubsection{Cross-Correlation Definition}
+
+For discrete signals $x[n]$ and $y[n]$, the cross-correlation is defined as:
+\begin{equation}
+    (x \star y)[k] = \sum_{n=-\infty}^{\infty} x[n] \cdot y[n+k]
+\end{equation}
+
+The lag $k$ at which the cross-correlation achieves its maximum indicates the time offset where the two signals are most similar.
+
+\subsubsection{Relationship to Convolution}
+
+Cross-correlation is closely related to convolution:
+\begin{equation}
+    x \star y = x * \text{flip}(y)
+\end{equation}
+where $\text{flip}(y)[n] = y[-n]$ is the time-reversed signal. This relationship allows efficient computation via FFT.
+
+\subsubsection{Normalized Cross-Correlation}
+
+To obtain a correlation coefficient independent of signal amplitude:
+\begin{equation}
+    r_{xy}[k] = \frac{(x \star y)[k]}{\|x\| \cdot \|y\|}
+\end{equation}
+where $\|x\| = \sqrt{\sum_n |x[n]|^2}$ is the signal energy.
+
+\subsection{Experiment: Shazam-like Audio Matching}
+
+\subsubsection{Setup}
+
+We performed a real-world audio matching experiment:
+
+\begin{enumerate}
+    \item \textbf{Original audio:} The iconic Mario coin ``bling!'' sound (downloaded from YouTube)
+    \item \textbf{Query recording:} A phone recording of the same sound played through laptop speakers
+\end{enumerate}
+
+This setup simulates the Shazam use case: a user records ambient audio containing a known sound, and the algorithm must find where (and if) the sound occurs.
+
+\subsubsection{Data Specifications}
+
+\begin{table}[H]
+\centering
+\caption{Audio Data Parameters}
+\label{tab:audio_data}
+\begin{tabular}{@{}lcc@{}}
+\toprule
+\textbf{Parameter} & \textbf{Original} & \textbf{Recording} \\
+\midrule
+Source & YouTube (digital) & Phone microphone \\
+Duration & 1.683 s & 1.649 s \\
+Original sample rate & 48000 Hz & 44100 Hz \\
+Final sample rate & 48000 Hz & 48000 Hz (resampled) \\
+Samples & 80806 & 79133 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Preprocessing}
+
+\begin{enumerate}
+    \item Convert stereo to mono (average channels)
+    \item Resample to common sample rate (48 kHz) using linear interpolation
+    \item Normalize to unit amplitude
+\end{enumerate}
+
+\subsection{Results}
+
+\subsubsection{Cross-Correlation Analysis}
+
+\begin{table}[H]
+\centering
+\caption{Cross-Correlation Results}
+\label{tab:xcorr_results}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Peak correlation lag & $-2254$ samples \\
+Peak time offset & $-0.047$ s \\
+Normalized correlation & 0.9146 \\
+Match location & $t = 0.000$ s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The negative lag indicates the recording started slightly before the original audio's beginning (the phone started recording before the sound played). The high normalized correlation (0.9146) confirms a strong match despite:
+\begin{itemize}
+    \item Different recording equipment (laptop speakers $\rightarrow$ phone mic)
+    \item Ambient noise in the recording
+    \item Acoustic distortion from the room
+\end{itemize}
+
+\subsubsection{Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p5_fig1_crosscorrelation.png}
+    \caption{Cross-correlation analysis. Top row: Original audio and phone recording time-domain signals. Middle row: Full cross-correlation function (left) and zoomed view around the peak (right). Bottom row: Match location highlighted in the original signal, and comparison of convolution vs cross-correlation.}
+    \label{fig:p5_xcorr}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p5_fig2_spectrograms.png}
+    \caption{Frequency analysis comparison. Top: Spectrograms of original and recorded audio showing similar frequency content. Bottom: DFT magnitude spectra confirming the characteristic frequencies of the Mario coin sound are preserved in the recording.}
+    \label{fig:p5_spectrograms}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Why Cross-Correlation Works for Audio Matching}
+
+Cross-correlation is effective for audio matching because:
+\begin{enumerate}
+    \item \textbf{Time-shift invariance:} The peak location automatically finds the correct alignment
+    \item \textbf{Noise robustness:} Random noise averages out over the summation
+    \item \textbf{Frequency preservation:} The recording preserves the characteristic frequencies even with acoustic distortion
+\end{enumerate}
+
+\subsubsection{Connection to Problem 3}
+
+This problem uses the same Mario coin sound from Problem 3, but now as a real audio signal rather than a simplified discrete sequence. The cross-correlation technique demonstrated here is the continuous-signal analog of the discrete operations in Problem 3.
+
+\subsubsection{Shazam Algorithm}
+
+However, we have to keep in mind that real music recognition services like Shazam use more sophisticated techniques, such as spectral fingerprinting, where instead of raw waveform correlation, they use spectrogram peaks. They also use hash tables for pre-computed fingerprint databases, enabling fast lookup.
+
+
+However, the fundamental principle of finding time-aligned pattern matches remains the same as our cross-correlation approach.
+
+\subsection{Conclusion}
+
+Cross-correlation successfully identified the Mario coin sound in the phone recording:
+We achieved a high correlation, of 0.9146 normalized correlation coefficient, despite real-world recording conditions that add noise.
+
+
+This demonstrates the power of correlation-based pattern matching for audio recognition applications.
+ 
+\newpage
+%==============================================================================
+\section{SVD for Image Compression}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{nitc.png}
+    \caption{NITC logo}
+    \label{fig:p6_analysis}
+\end{figure}
+\subsection{Introduction}
+
+This problem demonstrates the application of SVD for image compression. SVD provides an optimal low-rank approximation of matrices, enabling significant data compression while preserving the essential features of images.
+
+\subsection{Mathematical Background}
+
+\subsubsection{SVD Decomposition}
+
+Any matrix $\mathbf{A} \in \mathbb{R}^{m \times n}$ can be decomposed as:
+\begin{equation}
+    \mathbf{A} = \mathbf{U} \boldsymbol{\Sigma} \mathbf{V}^T
+\end{equation}
+where:
+\begin{itemize}
+    \item $\mathbf{U} \in \mathbb{R}^{m \times m}$: Left singular vectors (orthonormal)
+    \item $\boldsymbol{\Sigma} \in \mathbb{R}^{m \times n}$: Diagonal matrix of singular values $\sigma_1 \geq \sigma_2 \geq \cdots \geq 0$
+    \item $\mathbf{V} \in \mathbb{R}^{n \times n}$: Right singular vectors (orthonormal)
+\end{itemize}
+
+\subsubsection{Low-Rank Approximation}
+
+The rank-$k$ approximation retains only the $k$ largest singular values:
+\begin{equation}
+    \mathbf{A}_k = \mathbf{U}_k \boldsymbol{\Sigma}_k \mathbf{V}_k^T = \sum_{i=1}^{k} \sigma_i \mathbf{u}_i \mathbf{v}_i^T
+\end{equation}
+
+\subsubsection{Eckart-Young Theorem}
+
+The rank-$k$ SVD approximation is \textit{optimal} in the Frobenius norm:
+\begin{equation}
+    \mathbf{A}_k = \arg\min_{\text{rank}(\mathbf{B}) = k} \|\mathbf{A} - \mathbf{B}\|_F
+\end{equation}
+
+The approximation error is:
+\begin{equation}
+    \|\mathbf{A} - \mathbf{A}_k\|_F = \sqrt{\sum_{i=k+1}^{r} \sigma_i^2}
+\end{equation}
+
+\subsubsection{Compression Ratio}
+
+The original image requires $m \times n$ values. The rank-$k$ approximation requires:
+\begin{equation}
+    \text{Storage}_k = k \cdot (m + n + 1)
+\end{equation}
+for storing $\mathbf{U}_k$, $\boldsymbol{\Sigma}_k$, and $\mathbf{V}_k$. The compression ratio is:
+\begin{equation}
+    \text{Compression Ratio} = \frac{m \times n}{k \cdot (m + n + 1)}
+\end{equation}
+
+\subsubsection{Image Specifications}
+
+\begin{table}[H]
+\centering
+\caption{Image Data}
+\label{tab:image_data}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Dimensions & $512 \times 420$ pixels \\
+Total pixels & 215,040 \\
+Matrix rank & 420 \\
+Format & Grayscale (8-bit) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results}
+
+\subsubsection{Singular Value Spectrum}
+
+\begin{table}[H]
+\centering
+\caption{Energy Captured by Different Ranks}
+\label{tab:energy}
+\begin{tabular}{@{}ccc@{}}
+\toprule
+\textbf{Energy Threshold} & \textbf{Rank Required} & \textbf{Compression} \\
+\midrule
+90\% & 5 & 97.8\% \\
+95\% & 12 & 94.8\% \\
+99\% & 41 & 82.2\% \\
+99.9\% & 98 & 57.5\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Approximation Quality}
+
+\begin{table}[H]
+\centering
+\caption{Low-Rank Approximation Performance}
+\label{tab:svd_results}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Rank} & \textbf{Rel. Error (\%)} & \textbf{Compression} & \textbf{PSNR (dB)} \\
+\midrule
+1 & 50.16 & 230.5$\times$ & 8.24 \\
+5 & 30.89 & 46.1$\times$ & 12.45 \\
+10 & 24.07 & 23.1$\times$ & 14.61 \\
+20 & 16.91 & 11.5$\times$ & 17.68 \\
+50 & 8.06 & 4.6$\times$ & 24.11 \\
+100 & 2.99 & 2.3$\times$ & 32.73 \\
+200 & 0.38 & 1.15$\times$ & 50.73 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p6_fig1_svd_analysis.png}
+    \caption{SVD analysis of the NITC logo. Left: Original image. Middle: Singular value spectrum showing rapid decay (log scale). Right: Cumulative energy captured vs rank, with markers at 90\%, 95\%, 99\%, and 99.9\% thresholds.}
+    \label{fig:p6_analysis}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p6_fig2_approximations.png}
+    \caption{Low-rank approximations of the NITC logo. From left to right: Original, rank 1, 5, 10, 20, 50, 100, and 200. Visual quality improves rapidly with increasing rank.}
+    \label{fig:p6_approx}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p6_fig3_compression.png}
+    \caption{Compression performance metrics. Left: Reconstruction error vs rank. Middle: Compression ratio vs rank. Right: Quality (PSNR) vs compression ratio trade-off curve.}
+    \label{fig:p6_compression}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p6_fig4_comparison.png}
+    \caption{Visual comparison at different quality levels showing the storage percentage and PSNR for ranks 1, 10, 50, and 200.}
+    \label{fig:p6_comparison}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Singular Value Decay}
+
+The rapid decay of singular values indicates that the NITC logo has significant low-rank structure because only 5 singular values capture 90\% of the image energy, and 98 singular values capture 99.9\% of the energy.
+
+This is typical for images with large uniform regions and repetitive patterns.
+
+\subsubsection{Quality vs Compression Trade-off}
+
+The optimal operating point depends on the application:
+\begin{itemize}
+    \item \textbf{Thumbnail/preview:} Rank 5--10 provides recognizable image with 20--40$\times$ compression
+    \item \textbf{Web display:} Rank 50 gives good quality (PSNR $>$ 24 dB) with 4.6$\times$ compression
+    \item \textbf{High quality:} Rank 100 is nearly indistinguishable (PSNR $>$ 32 dB) with 2.3$\times$ compression
+\end{itemize}
+
+\subsubsection{Comparison to Other Methods}
+
+SVD compression differs from standard image compression (JPEG, PNG).
+In JPEG, there are Local DCT blocks (8$\times$8 pixel regions). The SVD advantage is of Optimal mathematical approximation, but the disadvantage is higher computational cost, and it is less practical for general images.
+
+\subsection{Conclusion}
+
+SVD successfully compressed the NITC logo:
+\begin{itemize}
+    \item \textbf{Rank 5:} 90\% energy with 97.8\% compression (only 2.2\% of original storage)
+    \item \textbf{Rank 50:} Excellent visual quality with 4.6$\times$ compression
+    \item \textbf{Rank 100:} Near-perfect reconstruction with 2.3$\times$ compression
+\end{itemize}
+
+The Eckart-Young theorem guarantees these are the optimal rank-$k$ approximations, demonstrating the power of SVD for data compression and dimensionality reduction.
+
+\newpage
+%==============================================================================
+\section{Least Squares Regression}
+%==============================================================================
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{inr.png}
+    \caption{Rupee hit a record low of 90.17 against USD a few days ago}
+\end{figure}
+
+\subsection{Introduction}
+
+This problem demonstrates least squares polynomial regression for curve fitting and the bias-variance trade-off in model selection. We apply this to real-world financial data: the INR/USD exchange rate over the past year.
+
+\subsection{Mathematical Background}
+
+\subsubsection{Least Squares Problem}
+
+Given data points $(t_i, y_i)$ for $i = 1, \ldots, n$, we seek polynomial coefficients $\mathbf{c} = [c_0, c_1, \ldots, c_d]^T$ that minimize:
+\begin{equation}
+    \min_{\mathbf{c}} \|\mathbf{A}\mathbf{c} - \mathbf{y}\|_2^2
+\end{equation}
+
+where $\mathbf{A}$ is the Vandermonde matrix:
+\begin{equation}
+    \mathbf{A} = \begin{bmatrix}
+        1 & t_1 & t_1^2 & \cdots & t_1^d \\
+        1 & t_2 & t_2^2 & \cdots & t_2^d \\
+        \vdots & \vdots & \vdots & \ddots & \vdots \\
+        1 & t_n & t_n^2 & \cdots & t_n^d
+    \end{bmatrix}
+\end{equation}
+
+\subsubsection{Normal Equations}
+
+The solution satisfies:
+\begin{equation}
+    \mathbf{A}^T\mathbf{A}\mathbf{c} = \mathbf{A}^T\mathbf{y} \quad \Rightarrow \quad \mathbf{c} = (\mathbf{A}^T\mathbf{A})^{-1}\mathbf{A}^T\mathbf{y}
+\end{equation}
+
+In MATLAB, this is computed as $\mathbf{c} = \mathbf{A} \backslash \mathbf{y}$ using QR decomposition for numerical stability.
+
+\subsubsection{Model Selection Metrics}
+
+\begin{itemize}
+    \item \textbf{$R^2$ (Coefficient of Determination):}
+    \begin{equation}
+        R^2 = 1 - \frac{\text{SS}_{\text{res}}}{\text{SS}_{\text{tot}}} = 1 - \frac{\sum_i (y_i - \hat{y}_i)^2}{\sum_i (y_i - \bar{y})^2}
+    \end{equation}
+    
+    \item \textbf{Adjusted $R^2$:} Penalizes model complexity
+    \begin{equation}
+        R^2_{\text{adj}} = 1 - (1 - R^2) \frac{n-1}{n-d-1}
+    \end{equation}
+    
+    \item \textbf{MSE (Mean Squared Error):}
+    \begin{equation}
+        \text{MSE} = \frac{1}{n} \sum_i (y_i - \hat{y}_i)^2
+    \end{equation}
+\end{itemize}
+
+\subsection{Data: INR/USD Exchange Rate}
+
+\subsubsection{Data Specifications}
+
+\begin{table}[H]
+\centering
+\caption{INR/USD Exchange Rate Data}
+\label{tab:inr_data}
+\begin{tabular}{@{}lr@{}}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Source & Yahoo Finance (INR=X) \\
+Period & Dec 6, 2024 -- Dec 5, 2025 \\
+Trading days & 258 \\
+Min rate & 84.22 INR/USD \\
+Max rate & 90.17 INR/USD \\
+Mean rate & 86.81 INR/USD \\
+Std deviation & 1.33 INR/USD \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Results}
+
+\subsubsection{Polynomial Fitting Results}
+
+\begin{table}[H]
+\centering
+\caption{Polynomial Regression Performance}
+\label{tab:poly_results}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+\textbf{Degree} & \textbf{MSE} & \textbf{$R^2$} & \textbf{Adj $R^2$} & \textbf{Status} \\
+\midrule
+1 & 0.8070 & 0.5410 & 0.5392 & Underfit \\
+2 & 0.5600 & 0.6815 & 0.6790 & Good fit \\
+3 & 0.5319 & 0.6975 & 0.6939 & Good fit \\
+5 & 0.2151 & 0.8777 & 0.8752 & Risk overfit \\
+10 & 0.1306 & 0.9257 & 0.9227 & Risk overfit \\
+20 & 0.0987 & 0.9439 & 0.9391 & Overfit \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Cross-Validation (80/20 Split)}
+
+\begin{table}[H]
+\centering
+\caption{Train/Test Error Comparison}
+\label{tab:cv_results}
+\begin{tabular}{@{}cccc@{}}
+\toprule
+\textbf{Degree} & \textbf{Train MSE} & \textbf{Test MSE} & \textbf{Overfit?} \\
+\midrule
+1 & 0.8178 & 0.7673 & No \\
+2 & 0.5651 & 0.5427 & No \\
+3 & 0.5380 & 0.5155 & No \\
+5 & 0.2178 & 0.2079 & No \\
+10 & 0.1325 & 0.1285 & No \\
+20 & 0.0958 & 0.1233 & Yes \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsubsection{Visualization}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p7_fig1_polynomial_fits.png}
+    \caption{Polynomial fits to INR/USD exchange rate data. Left: Lower degree polynomials (1, 2, 3, 5). Right: Higher degree polynomials (5, 10, 20) showing potential overfitting.}
+    \label{fig:p7_fits}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p7_fig2_residuals.png}
+    \caption{Residual analysis for degrees 1, 2, 3, and 5. Systematic patterns in residuals indicate model inadequacy (underfitting); random scatter indicates good fit.}
+    \label{fig:p7_residuals}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p7_fig3_metrics.png}
+    \caption{Model selection metrics. Left: $R^2$ increases with degree (always). Middle: Adjusted $R^2$ accounts for complexity. Right: MSE on log scale.}
+    \label{fig:p7_metrics}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p7_fig4_bias_variance.png}
+    \caption{Bias-variance trade-off: Training error (blue) vs test error (red). The gap between curves indicates overfitting. Optimal model (green star) minimizes test error.}
+    \label{fig:p7_biasvar}
+\end{figure}
+
+\begin{figure}[H]
+    \centering
+    \includegraphics[width=\textwidth]{p7_fig5_best_fit.png}
+    \caption{Best fit model (degree 20 by adjusted $R^2$) with $\pm 2\sigma$ confidence band. The high-degree polynomial captures the complex exchange rate dynamics.}
+    \label{fig:p7_best}
+\end{figure}
+
+\subsection{Discussion}
+
+\subsubsection{Underfitting (Low Degree)}
+
+Degree 1 (linear fit) clearly underfits the data:
+\begin{itemize}
+    \item Low $R^2$ (0.54): Only explains 54\% of variance
+    \item Systematic residual patterns: Curved structure visible in residuals
+    \item High bias: Model too simple to capture the trend
+\end{itemize}
+
+\subsubsection{Good Fit (Medium Degree)}
+
+Degrees 2--5 provide reasonable fits:
+\begin{itemize}
+    \item $R^2$ between 0.68--0.88
+    \item More random residual distribution
+    \item Balanced bias-variance trade-off
+\end{itemize}
+
+\subsubsection{Overfitting (High Degree)}
+
+Degree 20 shows signs of overfitting:
+\begin{itemize}
+    \item Train MSE (0.096) $<$ Test MSE (0.123)
+    \item High variance: Model fits noise in training data
+    \item Oscillations between data points
+\end{itemize}
+
+\subsubsection{Economic Interpretation}
+
+The exchange rate trend reflects:
+\begin{itemize}
+    \item \textbf{Overall depreciation:} INR weakened from $\sim$84 to $\sim$90 per USD
+    \item \textbf{Volatility periods:} Sharp movements correspond to economic events
+    \item \textbf{Polynomial capture:} Higher degrees needed to model complex dynamics
+\end{itemize}
+
+\subsubsection{Model Selection}
+
+Based on cross-validation, degree 10 provides the best balance:
+\begin{itemize}
+    \item Lowest test MSE (0.1285)
+    \item No significant train-test gap
+    \item High $R^2$ (0.9257) without overfitting
+\end{itemize}
+
+\subsection{Conclusion}
+
+Least squares polynomial regression on INR/USD exchange rate demonstrated:
+\begin{enumerate}
+    \item \textbf{Underfitting:} Low-degree polynomials fail to capture trends
+    \item \textbf{Good fit:} Medium degrees balance bias and variance
+    \item \textbf{Overfitting:} High degrees fit noise, poor generalization
+    \item \textbf{Cross-validation:} Essential for model selection
+\end{enumerate}
+
+The analysis shows the INR depreciated against USD over the past year, with degree 10 polynomial providing the best predictive model.
+
+\newpage
+%==============================================================================
+% References
+%==============================================================================
+\begin{thebibliography}{9}
+
+\bibitem{kutz2015dmd}
+Mann, J. and Kutz, J.N. (2015). 
+\textit{Dynamic Mode Decomposition for Financial Trading Strategies}. 
+arXiv:1508.04487 [q-fin.CP].
+
+\bibitem{kutz_youtube}
+Kutz, J.N. 
+\textit{DMD Code}. 
+YouTube video lecture series on Dynamic Mode Decomposition.
+
+\bibitem{sindy2016}
+Brunton, S.L., Proctor, J.L., and Kutz, J.N. (2016).
+\textit{Discovering Governing Equations from Data by Sparse Identification of Nonlinear Dynamical Systems}.
+Proceedings of the National Academy of Sciences, 113(15), 3932-3937.
+
+\end{thebibliography}
+
+\end{document}
